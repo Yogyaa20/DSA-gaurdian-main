@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Vapi from "@vapi-ai/web";
 
+// ── Vapi instance (singleton) ──────────────────────────────────────────────
 const vapiInstance = new Vapi('0f62e0e2-6c98-4bc0-bcda-1eba72fff361');
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -15,404 +16,816 @@ STRICT RULES:
 - Never repeat what the user said
 - Never say "Great question!" or similar filler phrases`;
 
+// ── Sample notes pulled from localStorage roadmap data ─────────────────────
+function getPersonalizedNotes() {
+  try {
+    const user = JSON.parse(localStorage.getItem('dsa_forge_user') || '{}');
+    const roadmaps = JSON.parse(localStorage.getItem(`roadmaps_${user.id}`) || '[]');
+    if (roadmaps.length === 0) return null;
+    return roadmaps[roadmaps.length - 1]; // latest roadmap
+  } catch { return null; }
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────
+const S = {
+  overlay: {
+    position: 'fixed', inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    zIndex: 99999,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(6px)',
+    animation: 'fadeIn 0.25s ease',
+  },
+  modal: {
+    backgroundColor: '#13131f',
+    borderRadius: '24px',
+    width: '92vw',
+    maxWidth: '1000px',
+    height: '85vh',
+    display: 'flex',
+    flexDirection: 'row',
+    boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
+    border: '1px solid rgba(99,102,241,0.25)',
+    overflow: 'hidden',
+    animation: 'scaleIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+  },
+  // ── LEFT SIDEBAR ──
+  sidebar: {
+    width: '280px',
+    minWidth: '280px',
+    backgroundColor: '#0e0e1a',
+    borderRight: '1px solid rgba(99,102,241,0.2)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  sidebarHeader: {
+    padding: '20px 18px 14px',
+    borderBottom: '1px solid rgba(99,102,241,0.15)',
+    background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.1))',
+  },
+  sidebarTitle: {
+    color: '#c4b5fd',
+    fontWeight: 700,
+    fontSize: '13px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  sidebarContent: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '14px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  noteCard: {
+    backgroundColor: 'rgba(99,102,241,0.08)',
+    border: '1px solid rgba(99,102,241,0.2)',
+    borderRadius: '12px',
+    padding: '12px 14px',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  noteCardActive: {
+    backgroundColor: 'rgba(99,102,241,0.2)',
+    border: '1px solid rgba(99,102,241,0.5)',
+    borderRadius: '12px',
+    padding: '12px 14px',
+    cursor: 'pointer',
+  },
+  noteTag: {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '20px',
+    fontSize: '10px',
+    fontWeight: 700,
+    marginBottom: '6px',
+    textTransform: 'uppercase',
+  },
+  noteTitle: {
+    color: '#e2e8f0',
+    fontSize: '13px',
+    fontWeight: 600,
+    lineHeight: '1.4',
+  },
+  noteSubtitle: {
+    color: '#64748b',
+    fontSize: '11px',
+    marginTop: '4px',
+  },
+  // ── RIGHT MAIN PANEL ──
+  mainPanel: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  header: {
+    padding: '16px 22px',
+    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexShrink: 0,
+  },
+  tabBar: {
+    display: 'flex',
+    gap: '0',
+    backgroundColor: '#1a1a2e',
+    borderBottom: '1px solid rgba(99,102,241,0.2)',
+    flexShrink: 0,
+  },
+  tab: (active) => ({
+    flex: 1,
+    padding: '13px',
+    border: 'none',
+    backgroundColor: active ? 'rgba(99,102,241,0.15)' : 'transparent',
+    color: active ? '#a5b4fc' : '#64748b',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: active ? 700 : 500,
+    borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
+    transition: 'all 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+  }),
+};
+
+// ── Topics for notes sidebar (fallback if no roadmap) ───────────────────────
+const DEFAULT_TOPICS = [
+  { id: 1, title: 'Arrays & Strings', tag: 'Easy', color: '#22c55e', desc: '2 pointers, sliding window', icon: '📦' },
+  { id: 2, title: 'Linked Lists', tag: 'Easy', color: '#22c55e', desc: 'Fast/slow pointer tricks', icon: '🔗' },
+  { id: 3, title: 'Binary Search', tag: 'Medium', color: '#f59e0b', desc: 'Search space reduction', icon: '🔍' },
+  { id: 4, title: 'Trees & BST', tag: 'Medium', color: '#f59e0b', desc: 'DFS, BFS, traversals', icon: '🌳' },
+  { id: 5, title: 'Dynamic Programming', tag: 'Hard', color: '#ef4444', desc: 'Memoization, tabulation', icon: '⚡' },
+  { id: 6, title: 'Graphs', tag: 'Hard', color: '#ef4444', desc: 'Dijkstra, Union-Find', icon: '🕸️' },
+  { id: 7, title: 'Stacks & Queues', tag: 'Easy', color: '#22c55e', desc: 'Monotonic stack patterns', icon: '📚' },
+  { id: 8, title: 'Heaps', tag: 'Medium', color: '#f59e0b', desc: 'Priority queue, top-K', icon: '🏔️' },
+];
+
+// ── Main Component ─────────────────────────────────────────────────────────
 const VoiceTeacher = () => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [mode, setMode] = useState(null); // 'voice' | 'text' | null
-    const [isCalling, setIsCalling] = useState(false);
-    const [messages, setMessages] = useState([]);
-    const [inputText, setInputText] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [isVapiSpeaking, setIsVapiSpeaking] = useState(false);
-    const messagesEndRef = useRef(null);
-    const assistantId = '1ef3572e-7152-4cc1-8a5d-183f2739ba77';
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeMode, setActiveMode] = useState('voice'); // 'voice' | 'chat'
+  const [isCalling, setIsCalling] = useState(false);
+  const [isVapiSpeaking, setIsVapiSpeaking] = useState(false);
+  const [vapiConnecting, setVapiConnecting] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeNote, setActiveNote] = useState(null);
+  const [vapiError, setVapiError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const assistantId = '1ef3572e-7152-4cc1-8a5d-183f2739ba77';
 
-    useEffect(() => {
-        vapiInstance.on('call-start', () => setIsCalling(true));
-        vapiInstance.on('call-end', () => { setIsCalling(false); setIsVapiSpeaking(false); });
-        vapiInstance.on('speech-start', () => setIsVapiSpeaking(true));
-        vapiInstance.on('speech-end', () => setIsVapiSpeaking(false));
-        vapiInstance.on('error', (e) => {
-            console.error("Vapi Error:", e);
-            setIsCalling(false);
-            setIsVapiSpeaking(false);
-        });
-    }, []);
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-
-    const startVoiceCall = () => {
-        setMode('voice');
-        vapiInstance.start(assistantId);
+  // ── Vapi event listeners ──
+  useEffect(() => {
+    const onStart = () => {
+      setIsCalling(true);
+      setVapiConnecting(false);
+      setVapiError(null);
+    };
+    const onEnd = () => {
+      setIsCalling(false);
+      setIsVapiSpeaking(false);
+      setVapiConnecting(false);
+    };
+    const onSpeechStart = () => setIsVapiSpeaking(true);
+    const onSpeechEnd = () => setIsVapiSpeaking(false);
+    const onError = (e) => {
+      console.error('Vapi Error:', e);
+      setIsCalling(false);
+      setIsVapiSpeaking(false);
+      setVapiConnecting(false);
+      setVapiError('Voice connection failed. Try again.');
     };
 
-    const stopVoiceCall = () => {
-        vapiInstance.stop();
-        setMode(null);
+    vapiInstance.on('call-start', onStart);
+    vapiInstance.on('call-end', onEnd);
+    vapiInstance.on('speech-start', onSpeechStart);
+    vapiInstance.on('speech-end', onSpeechEnd);
+    vapiInstance.on('error', onError);
+
+    return () => {
+      vapiInstance.off('call-start', onStart);
+      vapiInstance.off('call-end', onEnd);
+      vapiInstance.off('speech-start', onSpeechStart);
+      vapiInstance.off('speech-end', onSpeechEnd);
+      vapiInstance.off('error', onError);
     };
+  }, []);
 
-    const sendTextMessage = async () => {
-        if (!inputText.trim() || isLoading) return;
-        const userMsg = { role: 'user', content: inputText.trim() };
-        const newMessages = [...messages, userMsg];
-        setMessages(newMessages);
-        setInputText('');
-        setIsLoading(true);
+  // Auto-scroll chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-        try {
-            const groqKey = process.env.REACT_APP_GROQ_API_KEY;
-            const response = await fetch(GROQ_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${groqKey}`
-                },
-                body: JSON.stringify({
-                    model: 'llama3-8b-8192',
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        ...newMessages
-                    ],
-                    max_tokens: 200,
-                    temperature: 0.5
-                })
-            });
-            const data = await response.json();
-            const reply = data.choices?.[0]?.message?.content || "Error getting response.";
-            setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
-        } catch (err) {
-            console.error(err);
-            setMessages(prev => [...prev, { role: 'assistant', content: "Network error. Try again." }]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  // Focus input when switching to chat
+  useEffect(() => {
+    if (activeMode === 'chat' && isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [activeMode, isOpen]);
 
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendTextMessage();
-        }
-    };
+  // Stop call when closing
+  const handleClose = () => {
+    if (isCalling) vapiInstance.stop();
+    setIsOpen(false);
+    setIsCalling(false);
+    setVapiConnecting(false);
+    setVapiError(null);
+  };
 
-    const closeModal = () => {
-        if (isCalling) vapiInstance.stop();
-        setIsOpen(false);
-        setMode(null);
-        setMessages([]);
-    };
+  // ── Voice controls ──
+  const startCall = async () => {
+    setVapiError(null);
+    setVapiConnecting(true);
+    try {
+      await vapiInstance.start(assistantId);
+    } catch (e) {
+      setVapiConnecting(false);
+      setVapiError('Mic permission denied ya connection fail. Check mic permissions.');
+    }
+  };
 
-    return (
-        <>
-            {/* Floating Button */}
-            <button
-                onClick={() => setIsOpen(true)}
-                style={{
-                    position: 'fixed',
-                    bottom: '25px',
-                    left: '25px',
-                    padding: '14px 24px',
-                    backgroundColor: isCalling ? '#ef4444' : '#6366f1',
-                    color: 'white',
-                    borderRadius: '50px',
-                    zIndex: 99998,
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    boxShadow: '0 10px 30px rgba(99,102,241,0.4)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease',
-                }}
-            >
-                <span>{isCalling ? '🔴' : '🎙️'}</span>
-                {isCalling ? 'In Call...' : 'DSA Teacher'}
-            </button>
+  const stopCall = () => {
+    vapiInstance.stop();
+  };
 
-            {/* Modal Overlay */}
-            {isOpen && (
-                <div style={{
-                    position: 'fixed', inset: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    zIndex: 99999,
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    justifyContent: 'flex-start',
-                    padding: '20px',
-                    backdropFilter: 'blur(4px)'
-                }}>
-                    <div style={{
-                        backgroundColor: '#1e1e2e',
-                        borderRadius: '20px',
-                        width: '380px',
-                        maxHeight: '600px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
-                        border: '1px solid rgba(99,102,241,0.3)',
-                        overflow: 'hidden',
-                        animation: 'slideUp 0.3s ease'
-                    }}>
-                        {/* Header */}
-                        <div style={{
-                            padding: '16px 20px',
-                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={{
-                                    width: '36px', height: '36px',
-                                    backgroundColor: 'rgba(255,255,255,0.2)',
-                                    borderRadius: '50%',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '18px'
-                                }}>🤖</div>
-                                <div>
-                                    <div style={{ color: 'white', fontWeight: 700, fontSize: '15px' }}>DSA Teacher</div>
-                                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>
-                                        {isCalling ? (isVapiSpeaking ? '🔊 Speaking...' : '🎙️ Listening...') : 'AI Powered'}
-                                    </div>
-                                </div>
-                            </div>
-                            <button onClick={closeModal} style={{
-                                background: 'rgba(255,255,255,0.2)',
-                                border: 'none', color: 'white',
-                                width: '32px', height: '32px',
-                                borderRadius: '50%', cursor: 'pointer',
-                                fontSize: '16px', display: 'flex',
-                                alignItems: 'center', justifyContent: 'center'
-                            }}>✕</button>
-                        </div>
+  // ── Chat send ──
+  const sendMessage = async () => {
+    if (!inputText.trim() || isLoading) return;
+    const userMsg = { role: 'user', content: inputText.trim() };
 
-                        {/* Mode Selection */}
-                        {!mode && (
-                            <div style={{
-                                padding: '30px 20px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '12px',
-                                flex: 1
-                            }}>
-                                <p style={{ color: '#a0a0b0', textAlign: 'center', marginBottom: '10px', fontSize: '14px' }}>
-                                    Kaise baat karni hai?
-                                </p>
-                                <button onClick={startVoiceCall} style={{
-                                    padding: '16px',
-                                    backgroundColor: 'rgba(99,102,241,0.15)',
-                                    border: '2px solid rgba(99,102,241,0.4)',
-                                    borderRadius: '14px',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    fontSize: '15px',
-                                    fontWeight: '600',
-                                    transition: 'all 0.2s'
-                                }}
-                                onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.3)'}
-                                onMouseOut={e => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.15)'}
-                                >
-                                    <span style={{ fontSize: '28px' }}>🎙️</span>
-                                    <div style={{ textAlign: 'left' }}>
-                                        <div>Voice Call</div>
-                                        <div style={{ fontSize: '12px', color: '#a0a0b0', fontWeight: 400 }}>Bolke pooch, AI voice mein jawab dega</div>
-                                    </div>
-                                </button>
-                                <button onClick={() => setMode('text')} style={{
-                                    padding: '16px',
-                                    backgroundColor: 'rgba(139,92,246,0.15)',
-                                    border: '2px solid rgba(139,92,246,0.4)',
-                                    borderRadius: '14px',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    fontSize: '15px',
-                                    fontWeight: '600',
-                                    transition: 'all 0.2s'
-                                }}
-                                onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(139,92,246,0.3)'}
-                                onMouseOut={e => e.currentTarget.style.backgroundColor = 'rgba(139,92,246,0.15)'}
-                                >
-                                    <span style={{ fontSize: '28px' }}>💬</span>
-                                    <div style={{ textAlign: 'left' }}>
-                                        <div>Text Chat</div>
-                                        <div style={{ fontSize: '12px', color: '#a0a0b0', fontWeight: 400 }}>Type karke pooch, short answers milenge</div>
-                                    </div>
-                                </button>
-                            </div>
-                        )}
+    // Inject active note context if selected
+    const contextNote = activeNote
+      ? `\n[User is currently studying: "${activeNote.title}" - ${activeNote.desc}. Relate your answer to this topic if relevant.]`
+      : '';
 
-                        {/* Voice Mode UI */}
-                        {mode === 'voice' && (
-                            <div style={{
-                                flex: 1, display: 'flex', flexDirection: 'column',
-                                alignItems: 'center', justifyContent: 'center',
-                                padding: '40px 20px', gap: '20px'
-                            }}>
-                                {/* Animated circles */}
-                                <div style={{ position: 'relative', width: '100px', height: '100px' }}>
-                                    {isVapiSpeaking && (
-                                        <>
-                                            <div style={{
-                                                position: 'absolute', inset: '-15px',
-                                                borderRadius: '50%',
-                                                border: '2px solid rgba(99,102,241,0.4)',
-                                                animation: 'pulse 1.5s ease-in-out infinite'
-                                            }} />
-                                            <div style={{
-                                                position: 'absolute', inset: '-30px',
-                                                borderRadius: '50%',
-                                                border: '2px solid rgba(99,102,241,0.2)',
-                                                animation: 'pulse 1.5s ease-in-out infinite 0.3s'
-                                            }} />
-                                        </>
-                                    )}
-                                    <div style={{
-                                        width: '100px', height: '100px',
-                                        backgroundColor: isCalling ? (isVapiSpeaking ? '#6366f1' : '#22c55e') : '#ef4444',
-                                        borderRadius: '50%',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: '40px',
-                                        transition: 'background-color 0.3s'
-                                    }}>
-                                        {isVapiSpeaking ? '🔊' : '🎙️'}
-                                    </div>
-                                </div>
-                                <div style={{ color: 'white', fontSize: '16px', fontWeight: 600 }}>
-                                    {isCalling ? (isVapiSpeaking ? 'Teacher bol raha hai...' : 'Sun raha hoon...') : 'Connecting...'}
-                                </div>
-                                <div style={{ color: '#a0a0b0', fontSize: '13px', textAlign: 'center' }}>
-                                    DSA ke baare mein kuch bhi pooch!
-                                </div>
-                                <button onClick={stopVoiceCall} style={{
-                                    marginTop: '10px',
-                                    padding: '12px 30px',
-                                    backgroundColor: '#ef4444',
-                                    border: 'none', borderRadius: '50px',
-                                    color: 'white', cursor: 'pointer',
-                                    fontWeight: 700, fontSize: '14px'
-                                }}>
-                                    🛑 Call Band Karo
-                                </button>
-                            </div>
-                        )}
+    const allMsgs = [...messages, userMsg];
+    setMessages(allMsgs);
+    setInputText('');
+    setIsLoading(true);
 
-                        {/* Text Chat Mode */}
-                        {mode === 'text' && (
-                            <>
-                                {/* Messages */}
-                                <div style={{
-                                    flex: 1, overflowY: 'auto',
-                                    padding: '16px',
-                                    display: 'flex', flexDirection: 'column', gap: '10px',
-                                    maxHeight: '380px'
-                                }}>
-                                    {messages.length === 0 && (
-                                        <div style={{
-                                            textAlign: 'center', color: '#a0a0b0',
-                                            fontSize: '13px', marginTop: '20px'
-                                        }}>
-                                            <div style={{ fontSize: '30px', marginBottom: '8px' }}>👋</div>
-                                            Pooch kuch bhi DSA ke baare mein!<br/>
-                                            <span style={{ fontSize: '12px' }}>Arrays, Trees, DP, Graph... sab</span>
-                                        </div>
-                                    )}
-                                    {messages.map((msg, i) => (
-                                        <div key={i} style={{
-                                            display: 'flex',
-                                            justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'
-                                        }}>
-                                            <div style={{
-                                                maxWidth: '80%',
-                                                padding: '10px 14px',
-                                                borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                                backgroundColor: msg.role === 'user' ? '#6366f1' : '#2a2a3e',
-                                                color: 'white',
-                                                fontSize: '13px',
-                                                lineHeight: '1.5',
-                                                whiteSpace: 'pre-wrap'
-                                            }}>
-                                                {msg.content}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {isLoading && (
-                                        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                                            <div style={{
-                                                padding: '10px 16px',
-                                                backgroundColor: '#2a2a3e',
-                                                borderRadius: '18px 18px 18px 4px',
-                                                color: '#a0a0b0', fontSize: '13px'
-                                            }}>
-                                                ✍️ Soch raha hoon...
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div ref={messagesEndRef} />
-                                </div>
+    try {
+      const groqKey = process.env.REACT_APP_GROQ_API_KEY;
+      const res = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groqKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama3-8b-8192',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT + contextNote },
+            ...allMsgs,
+          ],
+          max_tokens: 250,
+          temperature: 0.5,
+        }),
+      });
 
-                                {/* Input */}
-                                <div style={{
-                                    padding: '12px 16px',
-                                    borderTop: '1px solid rgba(255,255,255,0.1)',
-                                    display: 'flex', gap: '8px', alignItems: 'center'
-                                }}>
-                                    <input
-                                        value={inputText}
-                                        onChange={e => setInputText(e.target.value)}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="DSA question type karo..."
-                                        style={{
-                                            flex: 1,
-                                            padding: '10px 14px',
-                                            backgroundColor: '#2a2a3e',
-                                            border: '1px solid rgba(99,102,241,0.3)',
-                                            borderRadius: '50px',
-                                            color: 'white',
-                                            fontSize: '13px',
-                                            outline: 'none'
-                                        }}
-                                    />
-                                    <button
-                                        onClick={sendTextMessage}
-                                        disabled={isLoading || !inputText.trim()}
-                                        style={{
-                                            width: '40px', height: '40px',
-                                            backgroundColor: inputText.trim() ? '#6366f1' : '#3a3a4e',
-                                            border: 'none', borderRadius: '50%',
-                                            color: 'white', cursor: inputText.trim() ? 'pointer' : 'default',
-                                            fontSize: '16px', display: 'flex',
-                                            alignItems: 'center', justifyContent: 'center',
-                                            transition: 'background-color 0.2s'
-                                        }}
-                                    >➤</button>
-                                </div>
-                            </>
-                        )}
-                    </div>
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content || 'Error getting response.';
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Network error. Try again.' }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
+
+  // ── Notes topics ──
+  const topics = DEFAULT_TOPICS; // Can be replaced with roadmap data
+
+  // ── Voice Status Text ──
+  const voiceStatus = () => {
+    if (vapiConnecting) return { text: '⏳ Connect ho raha hai...', color: '#f59e0b' };
+    if (isCalling && isVapiSpeaking) return { text: '🔊 Teacher bol raha hai', color: '#6366f1' };
+    if (isCalling) return { text: '🎙️ Bol, sun raha hoon', color: '#22c55e' };
+    return { text: 'Voice AI Teacher', color: '#a0a0b0' };
+  };
+
+  const vs = voiceStatus();
+
+  return (
+    <>
+      {/* ── Floating Trigger Button ── */}
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed', bottom: '28px', left: '28px',
+          padding: '13px 22px',
+          background: isCalling
+            ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+            : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          color: 'white', borderRadius: '50px', zIndex: 99998,
+          border: 'none', cursor: 'pointer', fontWeight: 700,
+          boxShadow: isCalling
+            ? '0 8px 30px rgba(239,68,68,0.5)'
+            : '0 8px 30px rgba(99,102,241,0.45)',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          fontSize: '14px', transition: 'all 0.25s ease',
+          letterSpacing: '0.01em',
+        }}
+      >
+        <span style={{ fontSize: '16px' }}>{isCalling ? '🔴' : '🎙️'}</span>
+        {isCalling ? 'Call Chal Rahi...' : 'DSA Teacher'}
+        {isCalling && (
+          <span style={{
+            width: '8px', height: '8px', borderRadius: '50%',
+            backgroundColor: '#fff', animation: 'blink 1s ease infinite',
+            display: 'inline-block',
+          }} />
+        )}
+      </button>
+
+      {/* ── Full Page Modal ── */}
+      {isOpen && (
+        <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+          <div style={S.modal}>
+
+            {/* ═══ LEFT SIDEBAR: NOTES ═══════════════════════════════════════ */}
+            <div style={S.sidebar}>
+              <div style={S.sidebarHeader}>
+                <div style={S.sidebarTitle}>
+                  <span>📝</span> Meri Notes
                 </div>
-            )}
+                <div style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                  Topic select karke padho
+                </div>
+              </div>
 
-            <style>{`
-                @keyframes slideUp {
-                    from { transform: translateY(20px); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-                @keyframes pulse {
-                    0%, 100% { transform: scale(1); opacity: 1; }
-                    50% { transform: scale(1.1); opacity: 0.5; }
-                }
-            `}</style>
-        </>
-    );
+              <div style={S.sidebarContent}>
+                {/* Ask AI about note button */}
+                {activeNote && (
+                  <div style={{
+                    backgroundColor: 'rgba(99,102,241,0.12)',
+                    border: '1px solid rgba(99,102,241,0.35)',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    marginBottom: '4px',
+                  }}>
+                    <div style={{ color: '#a5b4fc', fontSize: '11px', fontWeight: 600, marginBottom: '6px' }}>
+                      ✨ Selected Topic
+                    </div>
+                    <div style={{ color: '#e2e8f0', fontSize: '12px', fontWeight: 600 }}>{activeNote.title}</div>
+                    <button
+                      onClick={() => {
+                        setActiveMode('chat');
+                        setInputText(`${activeNote.title} ke baare mein explain karo`);
+                        setTimeout(() => inputRef.current?.focus(), 150);
+                      }}
+                      style={{
+                        marginTop: '8px', width: '100%',
+                        padding: '6px', backgroundColor: '#6366f1',
+                        border: 'none', borderRadius: '8px',
+                        color: 'white', fontSize: '11px',
+                        cursor: 'pointer', fontWeight: 600,
+                      }}
+                    >
+                      💬 Is topic pe AI se pooch
+                    </button>
+                  </div>
+                )}
+
+                {/* Topic Cards */}
+                {topics.map(topic => (
+                  <div
+                    key={topic.id}
+                    onClick={() => setActiveNote(activeNote?.id === topic.id ? null : topic)}
+                    style={activeNote?.id === topic.id ? S.noteCardActive : S.noteCard}
+                    onMouseOver={e => {
+                      if (activeNote?.id !== topic.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.14)';
+                      }
+                    }}
+                    onMouseOut={e => {
+                      if (activeNote?.id !== topic.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.08)';
+                      }
+                    }}
+                  >
+                    <span style={{
+                      ...S.noteTag,
+                      backgroundColor: topic.color + '22',
+                      color: topic.color,
+                    }}>{topic.tag}</span>
+                    <div style={S.noteTitle}>{topic.icon} {topic.title}</div>
+                    <div style={S.noteSubtitle}>{topic.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ═══ RIGHT MAIN PANEL ══════════════════════════════════════════ */}
+            <div style={S.mainPanel}>
+
+              {/* Header */}
+              <div style={S.header}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '40px', height: '40px',
+                    background: 'rgba(255,255,255,0.2)',
+                    borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '20px',
+                  }}>🤖</div>
+                  <div>
+                    <div style={{ color: 'white', fontWeight: 700, fontSize: '16px' }}>DSA AI Teacher</div>
+                    <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '12px' }}>
+                      {activeMode === 'voice' ? vs.text : '💬 Text Chat Mode'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClose}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)', border: 'none',
+                    color: 'white', width: '34px', height: '34px',
+                    borderRadius: '50%', cursor: 'pointer', fontSize: '16px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.2s',
+                  }}
+                  onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.35)'}
+                  onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+                >✕</button>
+              </div>
+
+              {/* Tab Bar */}
+              <div style={S.tabBar}>
+                <button style={S.tab(activeMode === 'voice')} onClick={() => setActiveMode('voice')}>
+                  🎙️ Voice AI
+                  {isCalling && (
+                    <span style={{
+                      width: '7px', height: '7px', borderRadius: '50%',
+                      backgroundColor: '#22c55e', animation: 'blink 1s infinite',
+                      display: 'inline-block',
+                    }} />
+                  )}
+                </button>
+                <button style={S.tab(activeMode === 'chat')} onClick={() => setActiveMode('chat')}>
+                  💬 Chat AI
+                  {messages.length > 0 && (
+                    <span style={{
+                      backgroundColor: '#6366f1', color: 'white',
+                      borderRadius: '50%', width: '18px', height: '18px',
+                      fontSize: '10px', display: 'inline-flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 700,
+                    }}>{messages.filter(m => m.role === 'user').length}</span>
+                  )}
+                </button>
+              </div>
+
+              {/* ── VOICE MODE ── */}
+              {activeMode === 'voice' && (
+                <div style={{
+                  flex: 1, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  padding: '40px 30px', gap: '28px',
+                  background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.06) 0%, transparent 70%)',
+                }}>
+                  {/* Animated orb */}
+                  <div style={{ position: 'relative', width: '130px', height: '130px' }}>
+                    {(isCalling || vapiConnecting) && (
+                      <>
+                        <div style={{
+                          position: 'absolute', inset: '-18px', borderRadius: '50%',
+                          border: `2px solid ${isVapiSpeaking ? 'rgba(99,102,241,0.5)' : 'rgba(34,197,94,0.4)'}`,
+                          animation: 'ripple 2s ease-out infinite',
+                        }} />
+                        <div style={{
+                          position: 'absolute', inset: '-36px', borderRadius: '50%',
+                          border: `2px solid ${isVapiSpeaking ? 'rgba(99,102,241,0.25)' : 'rgba(34,197,94,0.2)'}`,
+                          animation: 'ripple 2s ease-out infinite 0.4s',
+                        }} />
+                        <div style={{
+                          position: 'absolute', inset: '-54px', borderRadius: '50%',
+                          border: `1px solid ${isVapiSpeaking ? 'rgba(99,102,241,0.1)' : 'rgba(34,197,94,0.1)'}`,
+                          animation: 'ripple 2s ease-out infinite 0.8s',
+                        }} />
+                      </>
+                    )}
+                    <div style={{
+                      width: '130px', height: '130px', borderRadius: '50%',
+                      background: isCalling
+                        ? (isVapiSpeaking
+                          ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                          : 'linear-gradient(135deg, #22c55e, #16a34a)')
+                        : vapiConnecting
+                          ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                          : 'linear-gradient(135deg, #374151, #1f2937)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '50px', transition: 'all 0.4s ease',
+                      boxShadow: isCalling
+                        ? (isVapiSpeaking
+                          ? '0 0 40px rgba(99,102,241,0.5)'
+                          : '0 0 40px rgba(34,197,94,0.4)')
+                        : 'none',
+                    }}>
+                      {vapiConnecting ? '⏳' : isCalling ? (isVapiSpeaking ? '🔊' : '🎙️') : '🎙️'}
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: vs.color, fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>
+                      {vapiConnecting ? 'Connect ho raha hai...' :
+                        isCalling ? (isVapiSpeaking ? 'Teacher Bol Raha Hai' : 'Sun Raha Hoon') :
+                          'Voice Teacher Ready'}
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: '13px' }}>
+                      {isCalling
+                        ? 'DSA ka koi bhi sawaal pooch, seedha bolke'
+                        : 'Start call karo aur DSA ke baare mein baat karo'}
+                    </div>
+                  </div>
+
+                  {/* Error message */}
+                  {vapiError && (
+                    <div style={{
+                      backgroundColor: 'rgba(239,68,68,0.1)',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      borderRadius: '12px', padding: '12px 16px',
+                      color: '#fca5a5', fontSize: '13px', textAlign: 'center',
+                      maxWidth: '320px',
+                    }}>
+                      ⚠️ {vapiError}
+                    </div>
+                  )}
+
+                  {/* Active note hint */}
+                  {activeNote && (
+                    <div style={{
+                      backgroundColor: 'rgba(99,102,241,0.1)',
+                      border: '1px solid rgba(99,102,241,0.25)',
+                      borderRadius: '12px', padding: '10px 16px',
+                      color: '#a5b4fc', fontSize: '12px',
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                    }}>
+                      <span>📝</span>
+                      <span>Current topic: <strong>{activeNote.title}</strong></span>
+                    </div>
+                  )}
+
+                  {/* Call Button */}
+                  {!isCalling && !vapiConnecting ? (
+                    <button
+                      onClick={startCall}
+                      style={{
+                        padding: '15px 48px',
+                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        border: 'none', borderRadius: '50px', color: 'white',
+                        cursor: 'pointer', fontWeight: 700, fontSize: '16px',
+                        boxShadow: '0 8px 25px rgba(99,102,241,0.45)',
+                        transition: 'all 0.2s', letterSpacing: '0.02em',
+                      }}
+                      onMouseOver={e => e.currentTarget.style.transform = 'scale(1.04)'}
+                      onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      🎙️ Call Shuru Karo
+                    </button>
+                  ) : (
+                    <button
+                      onClick={stopCall}
+                      disabled={vapiConnecting}
+                      style={{
+                        padding: '14px 44px',
+                        background: vapiConnecting
+                          ? 'linear-gradient(135deg, #6b7280, #4b5563)'
+                          : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                        border: 'none', borderRadius: '50px', color: 'white',
+                        cursor: vapiConnecting ? 'not-allowed' : 'pointer',
+                        fontWeight: 700, fontSize: '15px', opacity: vapiConnecting ? 0.7 : 1,
+                        boxShadow: '0 8px 25px rgba(239,68,68,0.4)',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      🛑 Call Khatam Karo
+                    </button>
+                  )}
+
+                  {/* Tip */}
+                  <div style={{ color: '#374151', fontSize: '11px', textAlign: 'center' }}>
+                    💡 Tip: Left sidebar se topic select karke voice call mein padh sakte ho
+                  </div>
+                </div>
+              )}
+
+              {/* ── CHAT MODE ── */}
+              {activeMode === 'chat' && (
+                <>
+                  {/* Active note banner */}
+                  {activeNote && (
+                    <div style={{
+                      padding: '8px 16px', flexShrink: 0,
+                      backgroundColor: 'rgba(99,102,241,0.08)',
+                      borderBottom: '1px solid rgba(99,102,241,0.15)',
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                    }}>
+                      <span style={{ fontSize: '12px' }}>📝</span>
+                      <span style={{ color: '#a5b4fc', fontSize: '12px' }}>
+                        Context: <strong>{activeNote.title}</strong> — answers is topic ke context mein honge
+                      </span>
+                      <button
+                        onClick={() => setActiveNote(null)}
+                        style={{
+                          marginLeft: 'auto', background: 'none', border: 'none',
+                          color: '#64748b', cursor: 'pointer', fontSize: '12px',
+                        }}
+                      >✕ Remove</button>
+                    </div>
+                  )}
+
+                  {/* Messages */}
+                  <div style={{
+                    flex: 1, overflowY: 'auto', padding: '18px 20px',
+                    display: 'flex', flexDirection: 'column', gap: '12px',
+                  }}>
+                    {messages.length === 0 && (
+                      <div style={{
+                        flex: 1, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center',
+                        color: '#4b5563', textAlign: 'center', padding: '40px',
+                      }}>
+                        <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
+                        <div style={{ fontSize: '16px', fontWeight: 600, color: '#6b7280', marginBottom: '8px' }}>
+                          DSA ke baare mein kuch bhi pooch!
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#4b5563' }}>
+                          Arrays, Trees, DP, Graphs, Sorting — sab kuch
+                        </div>
+                        <div style={{
+                          display: 'flex', flexWrap: 'wrap', gap: '8px',
+                          justifyContent: 'center', marginTop: '20px',
+                        }}>
+                          {['Two Sum kaise solve karein?', 'BFS vs DFS difference', 'DP memoization explain karo'].map(q => (
+                            <button
+                              key={q}
+                              onClick={() => setInputText(q)}
+                              style={{
+                                padding: '8px 14px',
+                                backgroundColor: 'rgba(99,102,241,0.1)',
+                                border: '1px solid rgba(99,102,241,0.25)',
+                                borderRadius: '20px', color: '#a5b4fc',
+                                cursor: 'pointer', fontSize: '12px',
+                                transition: 'all 0.2s',
+                              }}
+                            >{q}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {messages.map((msg, i) => (
+                      <div key={i} style={{
+                        display: 'flex',
+                        justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      }}>
+                        {msg.role === 'assistant' && (
+                          <div style={{
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '13px', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end',
+                          }}>🤖</div>
+                        )}
+                        <div style={{
+                          maxWidth: '72%',
+                          padding: '11px 16px',
+                          borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                          background: msg.role === 'user'
+                            ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                            : '#1e1e35',
+                          color: 'white', fontSize: '14px',
+                          lineHeight: '1.6', whiteSpace: 'pre-wrap',
+                          border: msg.role === 'assistant' ? '1px solid rgba(99,102,241,0.2)' : 'none',
+                        }}>{msg.content}</div>
+                      </div>
+                    ))}
+
+                    {isLoading && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px',
+                        }}>🤖</div>
+                        <div style={{
+                          padding: '12px 16px', backgroundColor: '#1e1e35',
+                          borderRadius: '18px 18px 18px 4px',
+                          border: '1px solid rgba(99,102,241,0.2)',
+                          display: 'flex', gap: '5px', alignItems: 'center',
+                        }}>
+                          {[0, 0.2, 0.4].map((d, i) => (
+                            <div key={i} style={{
+                              width: '7px', height: '7px', borderRadius: '50%',
+                              backgroundColor: '#6366f1',
+                              animation: `bounce 1s ease infinite ${d}s`,
+                            }} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Input Area */}
+                  <div style={{
+                    padding: '14px 18px',
+                    borderTop: '1px solid rgba(99,102,241,0.15)',
+                    display: 'flex', gap: '10px', alignItems: 'flex-end',
+                    backgroundColor: '#0e0e1a', flexShrink: 0,
+                  }}>
+                    <textarea
+                      ref={inputRef}
+                      value={inputText}
+                      onChange={e => setInputText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="DSA sawaal likhо... (Enter to send, Shift+Enter for newline)"
+                      rows={1}
+                      style={{
+                        flex: 1, padding: '12px 16px',
+                        backgroundColor: '#1a1a2e',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        borderRadius: '16px', color: 'white',
+                        fontSize: '14px', outline: 'none',
+                        resize: 'none', lineHeight: '1.5',
+                        maxHeight: '100px', overflowY: 'auto',
+                        fontFamily: 'inherit',
+                      }}
+                      onInput={e => {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+                      }}
+                    />
+                    <button
+                      onClick={sendMessage}
+                      disabled={isLoading || !inputText.trim()}
+                      style={{
+                        width: '44px', height: '44px', flexShrink: 0,
+                        background: inputText.trim()
+                          ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                          : '#1e1e35',
+                        border: 'none', borderRadius: '14px', color: 'white',
+                        cursor: inputText.trim() ? 'pointer' : 'default',
+                        fontSize: '18px', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        transition: 'all 0.2s',
+                        boxShadow: inputText.trim() ? '0 4px 15px rgba(99,102,241,0.4)' : 'none',
+                      }}
+                    >➤</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Global Animations ── */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; } to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.92); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes ripple {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 4px; }
+      `}</style>
+    </>
+  );
 };
 
 export default VoiceTeacher;

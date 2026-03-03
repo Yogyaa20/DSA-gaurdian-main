@@ -1,69 +1,77 @@
-.App {
-  min-height: 100vh;
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg-void: #030508;
+  --bg-deep: #080c12;
+  --bg-card: #0d1117;
+  --neon-green: #00ff88;
+  --neon-cyan: #00d4ff;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --border-dim: rgba(48,54,61,0.8);
+  --shadow-neon: 0 0 20px rgba(0,255,136,0.15), 0 0 60px rgba(0,255,136,0.05);
 }
 
-.App-header {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg-void) !important;
+  color: var(--text-primary) !important;
+  font-family: 'Syne', sans-serif !important;
+  overflow-x: hidden;
 }
 
-.App-link {
-  color: #61dafb;
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,255,136,0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,136,0.018) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none; z-index: 0;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+#root { position: relative; z-index: 1; }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: rgba(0,255,136,0.2); border-radius: 3px; }
 
-::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.6s ease-out;
-}
-
-/* Gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #00ff88, #00d4ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Card hover effect */
-.card-hover {
-  transition: all 0.3s ease;
+.min-h-screen { background-color: var(--bg-void) !important; }
+.bg-gradient-to-br { background: var(--bg-void) !important; }
+
+.card-hover { transition: all 0.25s ease !important; }
+.card-hover:hover {
+  border-color: rgba(0,255,136,0.25) !important;
+  transform: translateY(-3px) !important;
+  box-shadow: var(--shadow-neon), 0 8px 32px rgba(0,0,0,0.4) !important;
 }
 
-.card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes float {
+  0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); }
+}
+@keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+
+.animate-fadeIn { animation: fadeIn 0.5s ease forwards; }
+.animate-fadeInUp { animation: fadeInUp 0.6s ease forwards; }
+.stagger-1 { opacity:0; animation: fadeInUp 0.5s ease forwards 0.1s; }
+.stagger-2 { opacity:0; animation: fadeInUp 0.5s ease forwards 0.2s; }
+.stagger-3 { opacity:0; animation: fadeInUp 0.5s ease forwards 0.3s; }
+.stagger-4 { opacity:0; animation: fadeInUp 0.5s ease forwards 0.4s; }

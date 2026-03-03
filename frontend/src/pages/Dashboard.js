@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { api } from '../App';
 import { toast } from 'sonner';
-import { 
-  Code, LogOut, Sparkles, TrendingUp, Target, BookOpen, 
-  CheckCircle2, Clock, AlertCircle, BarChart3 
-} from 'lucide-react';
+import { Sparkles, BookOpen, TrendingUp, Target, CheckCircle2, Clock, AlertCircle, BarChart3 } from 'lucide-react';
 import Navbar from '../components/Navbar';
+
+const StatCard = ({ label, value, icon: Icon, color, delay }) => (
+  <div style={{ background:'#0d1117', border:'1px solid rgba(48,54,61,0.8)', borderRadius:'16px', padding:'24px', position:'relative', overflow:'hidden', opacity:0, animation:`fadeInUp 0.5s ease forwards ${delay}s`, transition:'all 0.25s' }}
+    onMouseOver={e => { e.currentTarget.style.borderColor=color+'44'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow=`0 0 30px ${color}12`; }}
+    onMouseOut={e => { e.currentTarget.style.borderColor='rgba(48,54,61,0.8)'; e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=''; }}>
+    <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:`linear-gradient(90deg,transparent,${color},transparent)`, opacity:0.5 }}/>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+      <div>
+        <p style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'10px', color:'#484f58', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:'12px' }}>{label}</p>
+        <p style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'36px', fontWeight:800, background:`linear-gradient(135deg,${color},#e6edf3)`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', lineHeight:1 }}>{value}</p>
+      </div>
+      <div style={{ width:'40px', height:'40px', background:`${color}15`, border:`1px solid ${color}30`, borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <Icon size={18} color={color}/>
+      </div>
+    </div>
+  </div>
+);
 
 const Dashboard = ({ currentUser, logoutUser }) => {
   const navigate = useNavigate();
@@ -19,224 +29,145 @@ const Dashboard = ({ currentUser, logoutUser }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser) {
-      navigate('/');
-      return;
-    }
-    fetchDashboardData();
+    if (!currentUser) { navigate('/'); return; }
+    (async () => {
+      try {
+        setLoading(true);
+        const [s, r] = await Promise.all([
+          api.get(`/users/${currentUser.id}/dashboard-stats`),
+          api.get(`/users/${currentUser.id}/roadmaps`),
+        ]);
+        setStats(s.data); setRoadmaps(r.data);
+      } catch { toast.error('Failed to load dashboard'); }
+      finally { setLoading(false); }
+    })();
   }, [currentUser, navigate]);
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch user stats
-      const statsResponse = await api.get(`/users/${currentUser.id}/dashboard-stats`);
-      setStats(statsResponse.data);
-      
-      // Fetch user roadmaps
-      const roadmapsResponse = await api.get(`/users/${currentUser.id}/roadmaps`);
-      setRoadmaps(roadmapsResponse.data);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (!currentUser) return null;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Navbar currentUser={currentUser} logoutUser={logoutUser} />
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <Navbar currentUser={currentUser} logoutUser={logoutUser} />
-      
-      <div className="container mx-auto px-6 py-8" data-testid="dashboard-container">
-        {/* Welcome Section */}
-        <div className="mb-8 animate-fadeIn">
-          <h1 className="text-4xl font-bold mb-2">
-            Welcome back, <span className="gradient-text">{currentUser.username}</span>! 👋
-          </h1>
-          <p className="text-gray-600">Track your progress and continue your learning journey</p>
-        </div>
-
-        {/* Stats Overview */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-2 border-indigo-100" data-testid="stat-total-problems">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Problems</CardTitle>
-              <BookOpen className="h-5 w-5 text-indigo-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stats?.total_problems || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2 border-green-100" data-testid="stat-completed">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Completed</CardTitle>
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">{stats?.completed_problems || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2 border-yellow-100" data-testid="stat-in-progress">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">In Progress</CardTitle>
-              <Clock className="h-5 w-5 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-yellow-600">{stats?.in_progress_problems || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2 border-purple-100" data-testid="stat-completion-rate">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Completion Rate</CardTitle>
-              <TrendingUp className="h-5 w-5 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-purple-600">
-                {stats?.completion_rate ? stats.completion_rate.toFixed(1) : 0}%
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Progress Bar */}
-        {stats && stats.total_problems > 0 && (
-          <Card className="mb-8" data-testid="progress-card">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <BarChart3 className="mr-2 h-5 w-5" />
-                Overall Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Progress value={stats.completion_rate} className="h-3" />
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>{stats.completed_problems} completed</span>
-                <span>{stats.total_problems} total</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          <Card className="border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white cursor-pointer card-hover" 
-                onClick={() => navigate('/generate-roadmap')}
-                data-testid="quick-action-generate-roadmap">
-            <CardHeader>
-              <Sparkles className="h-12 w-12 text-indigo-600 mb-2" />
-              <CardTitle>Generate New Roadmap</CardTitle>
-              <CardDescription>Create an AI-powered personalized learning path</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full">Start Generating →</Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white cursor-pointer card-hover"
-                onClick={() => navigate('/problems')}
-                data-testid="quick-action-browse-problems">
-            <CardHeader>
-              <Code className="h-12 w-12 text-purple-600 mb-2" />
-              <CardTitle>Browse Problems</CardTitle>
-              <CardDescription>Explore our curated collection of DSA problems</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" className="w-full">View Problems →</Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* My Roadmaps */}
-        <Card data-testid="roadmaps-section">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="mr-2 h-5 w-5" />
-              My Roadmaps
-            </CardTitle>
-            <CardDescription>Your personalized learning paths</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {roadmaps.length === 0 ? (
-              <div className="text-center py-12" data-testid="no-roadmaps-message">
-                <AlertCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 mb-4">You haven't generated any roadmaps yet</p>
-                <Button onClick={() => navigate('/generate-roadmap')}>
-                  Generate Your First Roadmap
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {roadmaps.map((roadmap) => (
-                  <Card key={roadmap.id} className="border hover:border-indigo-300 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/roadmap/${roadmap.id}`)}
-                        data-testid={`roadmap-item-${roadmap.id}`}>
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="text-xl font-semibold mb-2">{roadmap.title}</h3>
-                          <p className="text-gray-600 mb-3">{roadmap.description}</p>
-                          <div className="flex space-x-2">
-                            <Badge variant="secondary">{roadmap.skill_level}</Badge>
-                            <Badge variant="outline">{roadmap.duration_weeks} weeks</Badge>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm">View →</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Problems by Difficulty */}
-        {stats && Object.keys(stats.problems_by_difficulty || {}).length > 0 && (
-          <Card className="mt-8" data-testid="difficulty-breakdown">
-            <CardHeader>
-              <CardTitle>Problems by Difficulty</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {Object.entries(stats.problems_by_difficulty).map(([difficulty, count]) => (
-                  <div key={difficulty} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={
-                        difficulty === 'easy' ? 'default' : 
-                        difficulty === 'medium' ? 'secondary' : 
-                        'destructive'
-                      }>
-                        {difficulty.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <span className="font-semibold">{count} problems</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+  if (loading) return (
+    <div style={{ minHeight:'100vh', background:'#030508', display:'flex', flexDirection:'column' }}>
+      <Navbar currentUser={currentUser} logoutUser={logoutUser}/>
+      <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ width:'40px', height:'40px', border:'2px solid rgba(0,255,136,0.1)', borderTop:'2px solid #00ff88', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
       </div>
     </div>
   );
-};
 
+  const completion = stats?.completion_rate || 0;
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#030508', fontFamily:"'Syne',sans-serif" }}>
+      <div style={{ position:'fixed', inset:0, backgroundImage:'linear-gradient(rgba(0,255,136,0.018) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,0.018) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none', zIndex:0 }}/>
+      <div style={{ position:'relative', zIndex:1 }}>
+        <Navbar currentUser={currentUser} logoutUser={logoutUser}/>
+
+        <div style={{ maxWidth:'1100px', margin:'0 auto', padding:'40px 24px' }} data-testid="dashboard-container">
+
+          {/* Header */}
+          <div style={{ marginBottom:'40px', opacity:0, animation:'fadeIn 0.5s ease forwards' }}>
+            <p style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'11px', color:'#00ff88', letterSpacing:'0.15em', marginBottom:'8px' }}>// WELCOME_BACK</p>
+            <h1 style={{ fontSize:'clamp(28px,4vw,44px)', fontWeight:800, color:'#e6edf3', letterSpacing:'-0.02em', lineHeight:1.1 }}>
+              Hey, <span style={{ background:'linear-gradient(135deg,#00ff88,#00d4ff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>{currentUser.username}</span> 👾
+            </h1>
+            <p style={{ color:'#8b949e', marginTop:'8px', fontSize:'14px' }}>Track your progress and continue your learning journey</p>
+          </div>
+
+          {/* Stats */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'16px', marginBottom:'32px' }}>
+            <StatCard label="Total Problems" value={stats?.total_problems||0} icon={BookOpen} color="#00ff88" delay={0.1} data-testid="stat-total-problems"/>
+            <StatCard label="Completed" value={stats?.completed_problems||0} icon={CheckCircle2} color="#00d4ff" delay={0.2} data-testid="stat-completed"/>
+            <StatCard label="In Progress" value={stats?.in_progress_problems||0} icon={Clock} color="#ffb300" delay={0.3} data-testid="stat-in-progress"/>
+            <StatCard label="Completion Rate" value={`${completion.toFixed(0)}%`} icon={TrendingUp} color="#a855f7" delay={0.4} data-testid="stat-completion-rate"/>
+          </div>
+
+          {/* Progress */}
+          {stats?.total_problems > 0 && (
+            <div style={{ background:'#0d1117', border:'1px solid rgba(48,54,61,0.8)', borderRadius:'16px', padding:'24px', marginBottom:'32px', opacity:0, animation:'fadeInUp 0.5s ease forwards 0.5s' }} data-testid="progress-card">
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <BarChart3 size={16} color="#00ff88"/>
+                  <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'12px', color:'#e6edf3', fontWeight:600, letterSpacing:'0.04em' }}>OVERALL_PROGRESS</span>
+                </div>
+                <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'12px', color:'#00ff88' }}>{completion.toFixed(1)}%</span>
+              </div>
+              <div style={{ height:'6px', background:'rgba(255,255,255,0.05)', borderRadius:'3px', overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${completion}%`, background:'linear-gradient(90deg,#00ff88,#00d4ff)', borderRadius:'3px', transition:'width 1s cubic-bezier(0.4,0,0.2,1)' }}/>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:'10px' }}>
+                <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'11px', color:'#484f58' }}>{stats.completed_problems} completed</span>
+                <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'11px', color:'#484f58' }}>{stats.total_problems} total</span>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'16px', marginBottom:'32px' }}>
+            {[
+              { icon:'⚡', title:'Generate New Roadmap', desc:'AI-powered personalized learning path', cta:'START_GENERATING →', path:'/generate-roadmap', color:'#00ff88', testId:'quick-action-generate-roadmap' },
+              { icon:'🎯', title:'Browse Problems', desc:'Explore curated DSA problem library', cta:'VIEW_PROBLEMS →', path:'/problems', color:'#00d4ff', testId:'quick-action-browse-problems' },
+            ].map((a, i) => (
+              <div key={a.path} onClick={() => navigate(a.path)} data-testid={a.testId}
+                style={{ background:'#0d1117', border:`1px solid ${a.color}25`, borderRadius:'16px', padding:'28px', cursor:'pointer', transition:'all 0.25s', opacity:0, animation:`fadeInUp 0.5s ease forwards ${0.6+i*0.1}s`, position:'relative', overflow:'hidden' }}
+                onMouseOver={e => { e.currentTarget.style.borderColor=a.color+'55'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow=`0 0 30px ${a.color}12`; }}
+                onMouseOut={e => { e.currentTarget.style.borderColor=a.color+'25'; e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=''; }}>
+                <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:`linear-gradient(90deg,transparent,${a.color},transparent)`, opacity:0.5 }}/>
+                <div style={{ fontSize:'28px', marginBottom:'12px' }}>{a.icon}</div>
+                <h3 style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, fontSize:'14px', color:'#e6edf3', marginBottom:'8px', letterSpacing:'0.02em' }}>{a.title}</h3>
+                <p style={{ color:'#8b949e', fontSize:'13px', marginBottom:'20px' }}>{a.desc}</p>
+                <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'12px', color:a.color, fontWeight:700, letterSpacing:'0.04em' }}>{a.cta}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* My Roadmaps */}
+          <div style={{ background:'#0d1117', border:'1px solid rgba(48,54,61,0.8)', borderRadius:'16px', padding:'28px', opacity:0, animation:'fadeInUp 0.5s ease forwards 0.8s' }} data-testid="roadmaps-section">
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'24px' }}>
+              <Target size={16} color="#00ff88"/>
+              <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'13px', color:'#e6edf3', fontWeight:700, letterSpacing:'0.04em' }}>MY_ROADMAPS</span>
+              <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'11px', color:'#484f58', marginLeft:'4px' }}>({roadmaps.length})</span>
+            </div>
+
+            {roadmaps.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'48px 24px' }} data-testid="no-roadmaps-message">
+                <AlertCircle size={40} color="#484f58" style={{ margin:'0 auto 16px' }}/>
+                <p style={{ color:'#8b949e', fontSize:'14px', marginBottom:'20px' }}>No roadmaps yet. Generate your first one!</p>
+                <button onClick={() => navigate('/generate-roadmap')}
+                  style={{ background:'linear-gradient(135deg,#00ff88,#00d4ff)', border:'none', borderRadius:'8px', padding:'10px 24px', fontFamily:"'JetBrains Mono',monospace", fontWeight:700, fontSize:'12px', color:'#030508', cursor:'pointer', letterSpacing:'0.04em' }}>
+                  GENERATE_ROADMAP →
+                </button>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                {roadmaps.map((rm, i) => (
+                  <div key={rm.id} onClick={() => navigate(`/roadmap/${rm.id}`)} data-testid={`roadmap-item-${rm.id}`}
+                    style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(48,54,61,0.6)', borderRadius:'12px', padding:'18px 20px', cursor:'pointer', transition:'all 0.2s', display:'flex', justifyContent:'space-between', alignItems:'center' }}
+                    onMouseOver={e => { e.currentTarget.style.borderColor='rgba(0,255,136,0.2)'; e.currentTarget.style.background='rgba(0,255,136,0.03)'; }}
+                    onMouseOut={e => { e.currentTarget.style.borderColor='rgba(48,54,61,0.6)'; e.currentTarget.style.background='rgba(255,255,255,0.02)'; }}>
+                    <div>
+                      <h3 style={{ fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:'15px', color:'#e6edf3', marginBottom:'6px' }}>{rm.title}</h3>
+                      <p style={{ color:'#8b949e', fontSize:'13px', marginBottom:'10px' }}>{rm.description}</p>
+                      <div style={{ display:'flex', gap:'8px' }}>
+                        {[rm.skill_level, `${rm.duration_weeks}w`].map(tag => (
+                          <span key={tag} style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'10px', color:'#00ff88', background:'rgba(0,255,136,0.08)', border:'1px solid rgba(0,255,136,0.2)', borderRadius:'4px', padding:'2px 8px', letterSpacing:'0.06em' }}>{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:'12px', color:'#484f58' }}>VIEW →</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Syne:wght@400;600;700;800&display=swap');
+        @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes fadeInUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+      `}</style>
+    </div>
+  );
+};
 export default Dashboard;

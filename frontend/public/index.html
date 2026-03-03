@@ -1,96 +1,17 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>DSA Guardian | AI Voice Teacher</title>
-        
-        <script src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/vapi-public.browser.js"></script>
-
-        <style>
-            #vapi-support-btn {
-                position: fixed;
-                bottom: 25px;
-                left: 25px;
-                background: #4f46e5;
-                color: white;
-                border: none;
-                border-radius: 50px;
-                padding: 14px 28px;
-                font-weight: 600;
-                cursor: pointer;
-                box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-                z-index: 999999; /* Sabse upar rahega */
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            .active-call { background: #ef4444 !important; }
-        </style>
-    </head>
-    <body>
-        <div id="root"></div>
-
-        <button id="vapi-support-btn" onclick="toggleVapi()">
-            <span id="btn-text">Talk to DSA Teacher</span>
-        </button>
-
-        <script>
-            // Global variables to prevent initialization errors
-            let vapiInstance = null;
-            let isCallActive = false;
-            const ASSISTANT_ID = '1ef3572e-7152-4cc1-8a5d-183f2739ba77';
-            const PUBLIC_KEY = '0f62e0e2-6c98-4bc0-bcda-1eba72fff361';
-
-            // Initialize Vapi immediately when script loads
-            window.onload = function() {
-                try {
-                    vapiInstance = new Vapi(PUBLIC_KEY);
-                    console.log("Vapi Initialized Successfully");
-
-                    vapiInstance.on('call-end', () => {
-                        console.log("Call Ended");
-                        resetUI();
-                    });
-
-                    vapiInstance.on('error', (e) => {
-                        console.error("Vapi Error:", e);
-                        resetUI();
-                    });
-                } catch (err) {
-                    console.error("Failed to init Vapi:", err);
-                }
-            };
-
-            function toggleVapi() {
-                const btn = document.getElementById('vapi-support-btn');
-                const btnText = document.getElementById('btn-text');
-
-                if (!vapiInstance) {
-                    alert("Voice system loading... please wait 2 seconds.");
-                    return;
-                }
-
-                if (!isCallActive) {
-                    console.log("Starting Call...");
-                    vapiInstance.start(ASSISTANT_ID);
-                    btnText.innerText = "Stop Teacher";
-                    btn.classList.add('active-call');
-                    isCallActive = true;
-                } else {
-                    console.log("Stopping Call...");
-                    vapiInstance.stop();
-                    resetUI();
-                }
-            }
-
-            function resetUI() {
-                const btn = document.getElementById('vapi-support-btn');
-                const btnText = document.getElementById('btn-text');
-                btnText.innerText = "Talk to DSA Teacher";
-                btn.classList.remove('active-call');
-                isCallActive = false;
-            }
-        </script>
-    </body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="DSA Forge - AI-Powered DSA Learning Platform" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <title>DSA Forge</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
 </html>
