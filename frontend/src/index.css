@@ -113,3 +113,12 @@ code {
         border-bottom-color: inherit;
     }
 }
+/* Emergent badge ko hamesha ke liye hide karne ke liye */
+#emergent-badge, 
+.emergent-badge, 
+iframe[src*="emergent"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}

@@ -5,6 +5,9 @@ import axios from 'axios';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 
+// 1. VoiceTeacher ko import kiya
+import VoiceTeacher from './voiceteacher';
+
 // Import pages
 import HomePage from './pages/HomePage';
 import Dashboard from './pages/Dashboard';
@@ -65,7 +68,11 @@ function App() {
           <Route path="/problems" element={<ProblemsList currentUser={currentUser} logoutUser={logoutUser} />} />
           <Route path="/roadmap/:roadmapId" element={<RoadmapView currentUser={currentUser} logoutUser={logoutUser} />} />
         </Routes>
+        
+        {/* 🎙️ Voice Teacher AI Agent - Added outside Routes so it stays on all pages */}
+        <VoiceTeacher />
       </BrowserRouter>
+      
       <Toaster position="top-right" richColors />
     </div>
   );

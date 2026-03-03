@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, Depends, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from groq import Groq
 import os
 import logging
 from pathlib import Path
@@ -13,7 +14,58 @@ import json
 
 from database import engine, get_db, Base
 from models import User, Roadmap, Problem, UserProgress, RoadmapProblem
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+# from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+
+class UserMessage:
+    """Mock UserMessage used when emergentintegrations is not installed."""
+
+    def __init__(self, text: str):
+        self.text = text
+
+
+class LlmChat:
+    """LlmChat wrapper that uses the Groq Python client."""
+
+    def __init__(self, api_key: str | None = None, session_id: str | None = None, system_message: str | None = None):
+        # Prefer explicitly passed key, otherwise fall back to GROQ_API_KEY from the environment
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        self.session_id = session_id
+        self.system_message = system_message
+
+    def with_model(self, provider: str, model: str) -> "LlmChat":
+        # In this Groq-backed implementation, we ignore provider/model and just return self.
+        # The actual model used is configured below in generate_response.
+        return self
+
+    def generate_response(self, message: UserMessage) -> str:
+        """
+        Use the Groq Python client with the llama3-8b-8192 model to generate
+        a JSON roadmap string based on the user's prompt.
+        """
+        if not self.api_key:
+            raise RuntimeError("GROQ_API_KEY is not set; cannot call Groq API.")
+
+        client = Groq(api_key=self.api_key)
+
+        messages = []
+        if self.system_message:
+            messages.append({"role": "system", "content": self.system_message})
+        messages.append({"role": "user", "content": message.text})
+
+        chat_completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.4,
+        )
+
+        # Return the raw content. The calling code in generate_dsa_roadmap_ai
+        # already knows how to strip ```json fences and parse JSON.
+        return chat_completion.choices[0].message.content
+
+    async def send_message(self, message: UserMessage) -> str:
+        """Async wrapper mimicking the real interface used by generate_dsa_roadmap_ai."""
+        return self.generate_response(message)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
